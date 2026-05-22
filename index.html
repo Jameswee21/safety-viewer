@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>홍성의료원 — 안전순회 현황</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;--accent:#3b82f6;--success:#22c55e;--danger:#ef4444;--warning:#f59e0b;--font:'Noto Sans KR',sans-serif}
+body{background:var(--bg);font-family:var(--font);color:var(--text);min-height:100vh}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+.header h1{font-size:15px;font-weight:700}
+.header .sub{font-size:11px;color:var(--muted);margin-left:auto}
+.tabs{display:flex;gap:2px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.tab{padding:10px 18px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);font-family:var(--font)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+.panel{display:none;padding:16px 20px;max-width:960px;margin:0 auto}
+.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--text)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.bd-red{background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.25)}
+.bd-grn{background:rgba(34,197,94,.12);color:var(--success);border:1px solid rgba(34,197,94,.25)}
+.bd-blu{background:rgba(59,130,246,.12);color:var(--accent);border:1px solid rgba(59,130,246,.25)}
+.bd-org{background:rgba(245,158,11,.12);color:var(--warning);border:1px solid rgba(245,158,11,.25)}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{background:var(--bg);padding:7px 10px;text-align:left;font-weight:700;border-bottom:2px solid var(--border);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
+.stat-num{font-size:24px;font-weight:800;color:var(--accent)}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:3px}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.fbtn{padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:none;cursor:pointer;font-size:11px;font-family:var(--font);color:var(--muted)}
+.fbtn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.search{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-family:var(--font);outline:none;width:180px}
+.updated{font-size:10.5px;color:var(--muted);margin-top:6px}
+.chart-wrap{position:relative;height:220px;margin-bottom:8px}
+.mly-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.stat-grid{grid-template-columns:repeat(2,1fr)}.mly-grid{grid-template-columns:1fr}}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="header">
+  <div>📊</div>
+  <h1>홍성의료원 일일안전 순회점검 현황</h1>
+  <div class="sub" id="updatedAt">로딩 중...</div>
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('status',this)">📊 조치현황</button>
+  <button class="tab" onclick="switchTab('monthly',this)">📈 월별현황</button>
+</div>
+<div class="panel active" id="panel-status">
+  <div class="stat-grid" id="statBoxes"></div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="filter-row" id="filterRow" style="margin-bottom:0"></div>
+      <input class="search" id="searchBox" placeholder="🔍 검색..." oninput="renderStatus()">
+    </div>
+    <div id="statusTable"></div>
+  </div>
+</div>
+<div class="panel" id="panel-monthly">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">📈 월별 점검사항 조치현황</div>
+      <select id="mlyYear" onchange="renderMonthly()" style="padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font);outline:none"></select>
+    </div>
+    <div class="mly-grid">
+      <div><div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">📊 월별 건수</div><div class="chart-wrap"><canvas id="barChart"></canvas></div></div>
+      <div><div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">📉 누적 추이</div><div class="chart-wrap"><canvas id="lineChart"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 월별 상세 집계</div>
+    <div id="mlyTable"></div>
+  </div>
+</div>
+<script>
+let _data=[],_filter="all",_barChart,_lineChart;
+async function init(){
+  try{
+    const r=await fetch("data.json?t="+Date.now());
+    const j=await r.json();
+    _data=j.statusItems||[];
+    const upd=document.getElementById("updatedAt");
+    if(upd&&j.updatedAt)upd.textContent="업데이트: "+new Date(j.updatedAt).toLocaleString("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+  }catch(e){
+    document.getElementById("statusTable").innerHTML='<div class="empty">데이터를 불러올 수 없습니다.<br>업로드 후 1분 뒤 새로고침 하세요.</div>';
+    return;
+  }
+  initYears();renderStatus();renderMonthly();
+}
+function switchTab(id,btn){
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  document.getElementById("panel-"+id).classList.add("active");
+  btn.classList.add("active");
+}
+function renderStatus(){
+  const q=(document.getElementById("searchBox")?.value||"").toLowerCase();
+  const filtered=_data.filter(it=>{
+    if(_filter!=="all"&&it.비고!==_filter)return false;
+    if(q&&!JSON.stringify(it).toLowerCase().includes(q))return false;
+    return true;
+  });
+  const tot=_data.length,ing=_data.filter(i=>i.비고==="진행중").length,done=_data.filter(i=>i.비고==="조치완료").length,plan=_data.filter(i=>(i.비고||"").includes("예정")).length;
+  document.getElementById("statBoxes").innerHTML=[
+    {n:tot,l:"전체",c:"var(--accent)"},{n:ing,l:"진행중",c:"var(--warning)"},{n:done,l:"조치완료",c:"var(--success)"},{n:plan,l:"조치예정",c:"var(--muted)"},
+  ].map(s=>`<div class="stat-box"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-lbl">${s.l}</div></div>`).join("");
+  document.getElementById("filterRow").innerHTML=[{k:"all",l:"전체"},{k:"진행중",l:"진행중"},{k:"조치완료",l:"조치완료"},{k:"조치예정",l:"예정"}]
+    .map(f=>`<button class="fbtn ${_filter===f.k?'active':''}" onclick="setFilter('${f.k}')">${f.l}</button>`).join("");
+  if(!filtered.length){document.getElementById("statusTable").innerHTML='<div class="empty">해당 항목이 없습니다</div>';return;}
+  const bm={"진행중":"bd-org","조치완료":"bd-grn"};
+  const rows=filtered.map(it=>{const bc=(it.비고||"").includes("예정")?"bd-blu":(bm[it.비고]||"bd-red");
+    return `<tr><td>${it.점검날짜||"-"}</td><td style="max-width:220px">${it.점검사항||"-"}</td><td>${it.장소||"-"}</td><td>${it.담당부서||"-"}</td><td>${it.조치날짜||"-"}</td><td><span class="badge ${bc}">${it.비고||"-"}</span></td></tr>`;
+  }).join("");
+  document.getElementById("statusTable").innerHTML=`<table><thead><tr><th>점검일</th><th>점검사항</th><th>장소</th><th>담당부서</th><th>조치일</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table><div class="updated" style="margin-top:6px">${filtered.length}건 표시 / 전체 ${tot}건</div>`;
+}
+function setFilter(f){_filter=f;renderStatus();}
+function initYears(){
+  const sel=document.getElementById("mlyYear");if(!sel)return;
+  const years=[...new Set(_data.map(d=>(d.점검날짜||"").slice(0,4)).filter(Boolean))].sort().reverse();
+  const cur=String(new Date().getFullYear());
+  if(!years.includes(cur))years.unshift(cur);
+  sel.innerHTML=years.map(y=>`<option value="${y}" ${y===cur?"selected":""}>${y}년</option>`).join("");
+}
+function renderMonthly(){
+  const year=document.getElementById("mlyYear")?.value||String(new Date().getFullYear());
+  const agg=Array.from({length:12},(_,i)=>{
+    const ms=String(i+1).padStart(2,"0"),prefix=`${year}-${ms}`,items=_data.filter(d=>(d.점검날짜||"").startsWith(prefix));
+    return{m:i+1,tot:items.length,done:items.filter(i=>i.비고==="조치완료").length,ing:items.filter(i=>i.비고==="진행중").length,plan:items.filter(i=>(i.비고||"").includes("예정")).length};
+  });
+  const labels=agg.map(a=>`${a.m}월`);
+  if(_barChart)_barChart.destroy();
+  _barChart=new Chart(document.getElementById("barChart"),{type:"bar",data:{labels,datasets:[
+    {label:"조치완료",data:agg.map(a=>a.done),backgroundColor:"rgba(34,197,94,.8)"},
+    {label:"진행중",data:agg.map(a=>a.ing),backgroundColor:"rgba(245,158,11,.8)"},
+    {label:"조치예정",data:agg.map(a=>a.plan),backgroundColor:"rgba(59,130,246,.8)"},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10}}}},scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,ticks:{font:{size:10},stepSize:1}}}}});
+  let cum=0;const cumData=agg.map(a=>{cum+=a.tot;return cum;});
+  if(_lineChart)_lineChart.destroy();
+  _lineChart=new Chart(document.getElementById("lineChart"),{type:"line",data:{labels,datasets:[{label:"누적 건수",data:cumData,borderColor:"#3b82f6",backgroundColor:"rgba(59,130,246,.1)",fill:true,tension:.3,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10}}}},scales:{x:{ticks:{font:{size:10}}},y:{ticks:{font:{size:10},stepSize:1},beginAtZero:true}}}});
+  const hasData=agg.some(a=>a.tot>0);
+  document.getElementById("mlyTable").innerHTML=hasData
+    ?`<table><thead><tr><th>월</th><th>전체</th><th>조치완료</th><th>진행중</th><th>예정</th><th>완료율</th></tr></thead><tbody>${agg.filter(a=>a.tot>0).map(a=>`<tr><td>${year}년 ${a.m}월</td><td>${a.tot}</td><td><span class="badge bd-grn">${a.done}</span></td><td><span class="badge bd-org">${a.ing}</span></td><td><span class="badge bd-blu">${a.plan}</span></td><td>${a.tot?Math.round(a.done/a.tot*100):0}%</td></tr>`).join("")}</tbody></table>`
+    :'<div class="empty">해당 연도 데이터가 없습니다</div>';
+}
+init();
+</script>
+</body>
+</html>
