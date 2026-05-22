@@ -29,9 +29,11 @@ th{background:var(--bg);padding:7px 10px;text-align:left;font-weight:700;border-
 td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
-.stat-num{font-size:24px;font-weight:800;color:var(--accent)}
-.stat-lbl{font-size:11px;color:var(--muted);margin-top:3px}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+.stat-box:hover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.stat-box.active{border-color:var(--accent);background:rgba(59,130,246,.1);box-shadow:0 0 0 2px rgba(59,130,246,.2)}
+.stat-num{font-size:24px;font-weight:800}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:3px;font-weight:500}
 .filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .fbtn{padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:none;cursor:pointer;font-size:11px;font-family:var(--font);color:var(--muted)}
 .fbtn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -110,11 +112,13 @@ function renderStatus(){
     return true;
   });
   const tot=_data.length,ing=_data.filter(i=>i.비고==="진행중").length,done=_data.filter(i=>i.비고==="조치완료").length,plan=_data.filter(i=>(i.비고||"").includes("예정")).length;
-  document.getElementById("statBoxes").innerHTML=[
-    {n:tot,l:"전체",c:"var(--accent)"},{n:ing,l:"진행중",c:"var(--warning)"},{n:done,l:"조치완료",c:"var(--success)"},{n:plan,l:"조치예정",c:"var(--muted)"},
-  ].map(s=>`<div class="stat-box"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-lbl">${s.l}</div></div>`).join("");
-  document.getElementById("filterRow").innerHTML=[{k:"all",l:"전체"},{k:"진행중",l:"진행중"},{k:"조치완료",l:"조치완료"},{k:"조치예정",l:"예정"}]
-    .map(f=>`<button class="fbtn ${_filter===f.k?'active':''}" onclick="setFilter('${f.k}')">${f.l}</button>`).join("");
+  const statDefs=[
+    {k:"all",  n:tot,  l:"전체",     c:"var(--accent)"},
+    {k:"진행중", n:ing,  l:"진행중",   c:"var(--warning)"},
+    {k:"조치완료",n:done, l:"조치완료", c:"var(--success)"},
+    {k:"조치예정",n:plan, l:"조치예정", c:"var(--muted)"},
+  ];
+  document.getElementById("statBoxes").innerHTML=statDefs.map(s=>`<div class="stat-box ${_filter===s.k?'active':''}" onclick="setFilter('${s.k}')"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-lbl">${s.l}</div></div>`).join("");
   if(!filtered.length){document.getElementById("statusTable").innerHTML='<div class="empty">해당 항목이 없습니다</div>';return;}
   const bm={"진행중":"bd-org","조치완료":"bd-grn"};
   const rows=filtered.map(it=>{const bc=(it.비고||"").includes("예정")?"bd-blu":(bm[it.비고]||"bd-red");
