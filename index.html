@@ -95,7 +95,7 @@ async function init(){
   try{
     const r=await fetch("data.json?t="+Date.now());
     const j=await r.json();
-    _data=(j.statusItems||[]).sort((a,b)=>(a.점검날짜||"").localeCompare(b.점검날짜||""));
+    _data=(j.statusItems||[]).sort((a,b)=>(b.점검날짜||"").localeCompare(a.점검날짜||""));
     const upd=document.getElementById("updatedAt");
     if(upd&&j.updatedAt)upd.textContent="업데이트: "+new Date(j.updatedAt).toLocaleString("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
   }catch(e){
