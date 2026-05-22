@@ -43,6 +43,11 @@ tr:last-child td{border-bottom:none}
 .mly-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:600px){.stat-grid{grid-template-columns:repeat(2,1fr)}.mly-grid{grid-template-columns:1fr}}
 .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+.pagination{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+.pgbtn{padding:4px 10px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;font-size:11px;font-family:var(--font);color:var(--text)}
+.pgbtn:hover:not(:disabled){background:rgba(59,130,246,.08);border-color:var(--accent)}
+.pgbtn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pgbtn:disabled{opacity:.4;cursor:default}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;800&display=swap" rel="stylesheet">
@@ -62,9 +67,10 @@ tr:last-child td{border-bottom:none}
   <div class="card">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <div class="filter-row" id="filterRow" style="margin-bottom:0"></div>
-      <input class="search" id="searchBox" placeholder="🔍 검색..." oninput="renderStatus()">
+      <input class="search" id="searchBox" placeholder="🔍 검색..." oninput="_page=1;renderStatus()">
     </div>
     <div id="statusTable"></div>
+    <div id="paginationControls"></div>
   </div>
 </div>
 <div class="panel" id="panel-monthly">
@@ -84,12 +90,12 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 <script>
-let _data=[],_filter="all",_barChart,_lineChart;
+let _data=[],_filter="all",_page=1,_pageSize=20,_barChart,_lineChart;
 async function init(){
   try{
     const r=await fetch("data.json?t="+Date.now());
     const j=await r.json();
-    _data=j.statusItems||[];
+    _data=(j.statusItems||[]).sort((a,b)=>(a.점검날짜||"").localeCompare(b.점검날짜||""));
     const upd=document.getElementById("updatedAt");
     if(upd&&j.updatedAt)upd.textContent="업데이트: "+new Date(j.updatedAt).toLocaleString("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
   }catch(e){
@@ -119,14 +125,35 @@ function renderStatus(){
     {k:"조치예정",n:plan, l:"조치예정", c:"var(--muted)"},
   ];
   document.getElementById("statBoxes").innerHTML=statDefs.map(s=>`<div class="stat-box ${_filter===s.k?'active':''}" onclick="setFilter('${s.k}')"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-lbl">${s.l}</div></div>`).join("");
-  if(!filtered.length){document.getElementById("statusTable").innerHTML='<div class="empty">해당 항목이 없습니다</div>';return;}
+  if(!filtered.length){document.getElementById("statusTable").innerHTML='<div class="empty">해당 항목이 없습니다</div>';document.getElementById("paginationControls").innerHTML="";return;}
+  const totalPages=Math.ceil(filtered.length/_pageSize);
+  if(_page>totalPages)_page=totalPages;
+  if(_page<1)_page=1;
+  const pageItems=filtered.slice((_page-1)*_pageSize,_page*_pageSize);
   const bm={"진행중":"bd-org","조치완료":"bd-grn"};
-  const rows=filtered.map(it=>{const bc=(it.비고||"").includes("예정")?"bd-blu":(bm[it.비고]||"bd-red");
+  const rows=pageItems.map(it=>{const bc=(it.비고||"").includes("예정")?"bd-blu":(bm[it.비고]||"bd-red");
     return `<tr><td>${it.점검날짜||"-"}</td><td style="max-width:220px">${it.점검사항||"-"}</td><td>${it.장소||"-"}</td><td>${it.담당부서||"-"}</td><td>${it.조치날짜||"-"}</td><td><span class="badge ${bc}">${it.비고||"-"}</span></td></tr>`;
   }).join("");
-  document.getElementById("statusTable").innerHTML=`<table><thead><tr><th>점검일</th><th>점검사항</th><th>장소</th><th>담당부서</th><th>조치일</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table><div class="updated" style="margin-top:6px">${filtered.length}건 표시 / 전체 ${tot}건</div>`;
+  document.getElementById("statusTable").innerHTML=`<table><thead><tr><th>점검일</th><th>점검사항</th><th>장소</th><th>담당부서</th><th>조치일</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table><div class="updated" style="margin-top:6px">${(_page-1)*_pageSize+1}–${Math.min(_page*_pageSize,filtered.length)} / ${filtered.length}건 표시 (전체 ${tot}건)</div>`;
+  renderPagination(totalPages);
 }
-function setFilter(f){_filter=f;renderStatus();}
+function renderPagination(totalPages){
+  const el=document.getElementById("paginationControls");if(!el)return;
+  if(totalPages<=1){el.innerHTML="";return;}
+  let btns='<div class="pagination">';
+  btns+=`<button class="pgbtn" onclick="gotoPage(${_page-1})" ${_page===1?"disabled":""}>‹ 이전</button>`;
+  const range=5,half=Math.floor(range/2);
+  let start=Math.max(1,_page-half),end=Math.min(totalPages,start+range-1);
+  if(end-start<range-1)start=Math.max(1,end-range+1);
+  if(start>1){btns+=`<button class="pgbtn" onclick="gotoPage(1)">1</button>`;if(start>2)btns+='<span style="padding:0 4px;color:var(--muted)">…</span>';} 
+  for(let i=start;i<=end;i++)btns+=`<button class="pgbtn ${i===_page?"active":""}" onclick="gotoPage(${i})">${i}</button>`;
+  if(end<totalPages){if(end<totalPages-1)btns+='<span style="padding:0 4px;color:var(--muted)">…</span>';btns+=`<button class="pgbtn" onclick="gotoPage(${totalPages})">${totalPages}</button>`;}
+  btns+=`<button class="pgbtn" onclick="gotoPage(${_page+1})" ${_page===totalPages?"disabled":""}>다음 ›</button>`;
+  btns+='</div>';
+  el.innerHTML=btns;
+}
+function gotoPage(p){_page=p;renderStatus();window.scrollTo({top:0,behavior:"smooth"});}
+function setFilter(f){_filter=f;_page=1;renderStatus();}
 function initYears(){
   const sel=document.getElementById("mlyYear");if(!sel)return;
   const years=[...new Set(_data.map(d=>(d.점검날짜||"").slice(0,4)).filter(Boolean))].sort().reverse();
