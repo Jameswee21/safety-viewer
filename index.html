@@ -60,7 +60,8 @@ tr:last-child td{border-bottom:none}
 <div class="header">
   <div>📊</div>
   <h1>홍성의료원 일일안전 순회점검 현황</h1>
-  <div class="sub" id="updatedAt">로딩 중...</div>
+  <div class="sub" id="updatedAt" style="margin-left:auto">로딩 중...</div>
+  <button id="adminBtn" onclick="adminToggle()" title="담당자 지정 모드" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-family:var(--font);color:var(--muted);flex-shrink:0">⚙️</button>
 </div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('status',this)">📊 조치현황</button>
@@ -93,20 +94,80 @@ tr:last-child td{border-bottom:none}
     <div id="mlyTable"></div>
   </div>
 </div>
+<div id="assignModal" onclick="if(event.target===this)closeAssign()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:20px;width:320px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px">👤 담당자 지정</div>
+    <div id="assignDesc" style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5"></div>
+    <select id="assignSel" onchange="document.getElementById('assignInput').style.display=this.value==='__direct__'?'block':'none'" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font);margin-bottom:8px;outline:none"></select>
+    <input id="assignInput" placeholder="이름 직접 입력" style="display:none;width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font);margin-bottom:8px;outline:none">
+    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">
+      <button onclick="closeAssign()" style="padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:11.5px;font-family:var(--font)">취소</button>
+      <button id="assignSaveBtn" onclick="saveAssign()" style="padding:6px 14px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:11.5px;font-family:var(--font)">저장</button>
+    </div>
+  </div>
+</div>
 <script>
+const GH_OWNER="Jameswee21",GH_REPO="safety-viewer";
 let _data=[],_filter="all",_page=1,_pageSize=20,_barChart,_lineChart;
+let _assignId=null,_token=localStorage.getItem("svToken")||"",_names=[];
+function adminToggle(){
+  if(_token){if(confirm("담당자 지정 모드를 해제할까요?\n(저장된 토큰이 이 브라우저에서 삭제됩니다)")){_token="";localStorage.removeItem("svToken");updateAdminBtn();renderStatus();}return;}
+  const t=prompt("담당자 지정용 GitHub 토큰을 입력하세요.\n최초 1회만 입력하면 이 브라우저에 저장됩니다.");
+  if(!t||!t.trim())return;
+  _token=t.trim();localStorage.setItem("svToken",_token);updateAdminBtn();renderStatus();
+}
+function updateAdminBtn(){const b=document.getElementById("adminBtn");if(!b)return;b.textContent=_token?"👤 지정모드 ON":"⚙️";b.style.color=_token?"var(--accent)":"var(--muted)";b.style.borderColor=_token?"var(--accent)":"var(--border)";b.title=_token?"클릭하면 담당자 지정 모드를 해제합니다":"담당자 지정 모드 (토큰 필요)";}
+function openAssign(id){
+  const it=_data.find(x=>x.id===id);if(!it)return;_assignId=id;
+  document.getElementById("assignDesc").textContent=(it.점검사항||"")+" · "+(it.장소||"");
+  const sel=document.getElementById("assignSel");
+  let html="<option value=''>— 미지정 —</option>";
+  _names.forEach(n=>{html+=`<option value="${n}" ${it.담당자===n?"selected":""}>${n}</option>`;});
+  html+="<option value='__direct__'>✏️ 직접 입력...</option>";
+  sel.innerHTML=html;
+  if(it.담당자&&!_names.includes(it.담당자)){const o=document.createElement("option");o.value=it.담당자;o.textContent=it.담당자;o.selected=true;sel.insertBefore(o,sel.lastElementChild);}
+  const inp=document.getElementById("assignInput");inp.style.display="none";inp.value="";
+  document.getElementById("assignModal").style.display="flex";
+}
+function closeAssign(){document.getElementById("assignModal").style.display="none";_assignId=null;}
+async function saveAssign(){
+  if(_assignId==null)return;
+  const sel=document.getElementById("assignSel");
+  const name=sel.value==="__direct__"?document.getElementById("assignInput").value.trim():sel.value;
+  if(sel.value==="__direct__"&&!name){alert("이름을 입력하세요");return;}
+  const btn=document.getElementById("assignSaveBtn");btn.disabled=true;btn.textContent="저장 중...";
+  try{
+    const api=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/data.json`;
+    const r=await fetch(api,{headers:{Authorization:"token "+_token,Accept:"application/vnd.github.v3+json"}});
+    if(!r.ok)throw new Error("데이터 조회 실패 ("+r.status+") — 토큰 권한을 확인하세요");
+    const j=await r.json();
+    const remote=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))));
+    const it=(remote.statusItems||[]).find(x=>x.id===_assignId);
+    if(!it)throw new Error("항목을 찾지 못했습니다. 페이지를 새로고침 후 다시 시도하세요");
+    if(name)it.담당자=name;else delete it.담당자;
+    if(name&&!(remote.담당자명단||[]).includes(name))remote.담당자명단=[...(remote.담당자명단||[]),name];
+    const body={message:"담당자 지정: "+(name||"해제"),content:btoa(unescape(encodeURIComponent(JSON.stringify(remote,null,2)))),sha:j.sha};
+    const p=await fetch(api,{method:"PUT",headers:{Authorization:"token "+_token,Accept:"application/vnd.github.v3+json","Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!p.ok){const e=await p.json().catch(()=>({}));throw new Error(e.message||("저장 실패 ("+p.status+")"));}
+    const local=_data.find(x=>x.id===_assignId);if(local){if(name)local.담당자=name;else delete local.담당자;}
+    if(name&&!_names.includes(name))_names.push(name);
+    closeAssign();renderStatus();
+  }catch(e){alert("저장 실패: "+e.message);}
+  btn.disabled=false;btn.textContent="저장";
+}
 async function init(){
   try{
     const r=await fetch("data.json?t="+Date.now());
     const j=await r.json();
     _data=(j.statusItems||[]).sort((a,b)=>(b.점검날짜||"").localeCompare(a.점검날짜||""));
+    _names=j.담당자명단||[];
     const upd=document.getElementById("updatedAt");
     if(upd&&j.updatedAt)upd.textContent="업데이트: "+new Date(j.updatedAt).toLocaleString("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
   }catch(e){
     document.getElementById("statusTable").innerHTML='<div class="empty">데이터를 불러올 수 없습니다.<br>업로드 후 1분 뒤 새로고침 하세요.</div>';
     return;
   }
-  initYears();renderStatus();renderMonthly();
+  updateAdminBtn();initYears();renderStatus();renderMonthly();
 }
 function switchTab(id,btn){
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
@@ -136,9 +197,10 @@ function renderStatus(){
   const pageItems=filtered.slice((_page-1)*_pageSize,_page*_pageSize);
   const bm={"진행중":"bd-org","조치완료":"bd-grn"};
   const rows=pageItems.map(it=>{const bc=(it.비고||"").includes("예정")?"bd-blu":(bm[it.비고]||"bd-red");
-    return `<tr><td>${it.점검날짜||"-"}</td><td style="max-width:220px">${it.점검사항||"-"}</td><td>${it.장소||"-"}</td><td>${it.담당부서||"-"}</td><td>${it.조치날짜||"-"}</td><td><span class="badge ${bc}">${it.비고||"-"}</span></td></tr>`;
+    const aCell=_token?`<span style="cursor:pointer;color:var(--accent);text-decoration:underline dotted;white-space:nowrap" onclick="openAssign(${it.id})">${it.담당자||"+ 지정"}</span>`:(it.담당자||"-");
+    return `<tr><td>${it.점검날짜||"-"}</td><td style="max-width:220px">${it.점검사항||"-"}</td><td>${it.장소||"-"}</td><td>${it.담당부서||"-"}</td><td>${aCell}</td><td>${it.조치날짜||"-"}</td><td><span class="badge ${bc}">${it.비고||"-"}</span></td></tr>`;
   }).join("");
-  document.getElementById("statusTable").innerHTML=`<table><thead><tr><th>점검일</th><th>점검사항</th><th>장소</th><th>담당부서</th><th>조치일</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table><div class="updated" style="margin-top:6px">${(_page-1)*_pageSize+1}–${Math.min(_page*_pageSize,filtered.length)} / ${filtered.length}건 표시 (전체 ${tot}건)</div>`;
+  document.getElementById("statusTable").innerHTML=`<table><thead><tr><th>점검일</th><th>점검사항</th><th>장소</th><th>담당부서</th><th>담당자</th><th>조치일</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table><div class="updated" style="margin-top:6px">${(_page-1)*_pageSize+1}–${Math.min(_page*_pageSize,filtered.length)} / ${filtered.length}건 표시 (전체 ${tot}건)</div>`;
   renderPagination(totalPages);
 }
 function renderPagination(totalPages){
