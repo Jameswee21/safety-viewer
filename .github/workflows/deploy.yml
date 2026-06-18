@@ -1,42 +1,35 @@
-name: 🔐 StaticCrypt 암호화 & GitHub Pages 배포
+name: 🔐 GitHub Pages 배포 (데이터 암호화 내장)
+
+# 데이터는 safety_local.html이 '뷰어 열람 비밀번호'로 AES-GCM 암호화하여
+# index.html 안에 내장합니다. 따라서 별도 StaticCrypt 암호화나 data.json 배포가 불필요합니다.
+# 이 워크플로는 index.html만 gh-pages로 배포하며, *.json은 절대 배포하지 않습니다.
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:          # 수동 실행 버튼
 
 permissions:
-  contents: write
-
-concurrency:
-  group: pages-deploy
-  cancel-in-progress: true  
+  contents: write             # gh-pages 브랜치 쓰기 권한
 
 jobs:
-  encrypt-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - uses: actions/checkout@v4
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - name: StaticCrypt 암호화
+      - name: dist 준비 (index.html만 배포 · JSON 미배포)
         run: |
           mkdir -p dist
-          npx staticrypt index.html \
-            -p "${{ secrets.SITE_PASSWORD }}" \
-            -d ./dist \
-            --no-remember \
-            --short
-          find . -maxdepth 1 -name "*.json" -exec cp {} ./dist/ \;
+          cp index.html ./dist/
+          # ⚠️ 보안: data.json 등 평문 JSON은 배포하지 않습니다.
+          #         (데이터는 index.html 안에 암호화 내장됨)
 
-      - name: GitHub Pages 배포
+      - name: GitHub Pages 배포 (gh-pages 브랜치)
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          force_orphan: true
+          force_orphan: true    # gh-pages를 항상 최신으로 교체 → 과거 data.json 잔존 제거
